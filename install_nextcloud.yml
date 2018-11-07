@@ -1,0 +1,64 @@
+---
+- hosts: nextcloud_nodes
+  become: yes
+  gather_facts: no
+  pre_tasks:
+    - name: "Install python2" 
+      raw: sudo apt update --fix-missing && sudo apt -y install python python-dev php
+  vars:
+    nextcloud_archive_url: https://download.nextcloud.com/server/releases/nextcloud-14.0.3.tar.bz2
+    db_name: db
+    db_user: akubala
+    db_user_pswd: HelloWorld
+  tasks:
+    - name: "Install Apache"
+      apt:
+        name: apache2
+        state: latest
+    - name: "Install PHP and dependencies - part 1"
+      apt:
+        name: ["libapache2-mod-php", "php-gd", "php-json", "php-mysql", "php-curl", "php-mbstring"]
+        state: latest
+    - name: "Install PHP and dependencies - part 2"
+      apt:
+        name: ["php-intl", "php-imagick", "php-xml","php-zip"]
+        state: latest
+    - name: "Install MariaDB"
+      apt:
+        name: ["mariadb-server", "libmysqlclient-dev", "python-mysqldb"]
+        state: latest
+    - name: "Create MySQL database"
+      mysql_db:
+        name: "{{ db_name }}"
+        state: present
+    - name: "Create database user"
+      mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_user_pswd }}"
+        priv: "*.*:ALL,GRANT"
+        state: present
+    - name: "Restart mariadb service"
+      service:
+        name: mariadb
+        state: restarted
+    - name: "Download NextCloud archive"
+      unarchive:
+        src: "{{ nextcloud_archive_url }}"
+        dest: /var/www
+        remote_src: yes
+    - name: "Configure Apache Web server"
+      copy:
+        src: ./templates/nextcloud.conf
+        dest: /etc/apache2/sites-available/nextcloud.conf
+    - name: "Activate installation wizard"
+      file:
+        dest: /var/www/nextcloud/
+        owner: www-data
+        group: www-data
+        recurse: yes
+    - name: "Set new configuration to Apache"
+      shell: a2ensite nextcloud.conf
+    - name: "Restart Apache"
+      service:
+        name: apache2
+        state: restarted
